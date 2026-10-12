@@ -1,0 +1,17 @@
+version: '3.8'
+services:
+  postgres_db:
+    image: postgres:16
+    container_name: local-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: matvei
+      POSTGRES_PASSWORD: '1234mm'
+      POSTGRES_DB: m_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgress_db:/var/lib/postgresql/data
+
+volumes:
+  postgress_db:
