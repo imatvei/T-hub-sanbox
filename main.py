@@ -5,19 +5,23 @@ import pandas as pd
 from pandas.api.types import infer_dtype
 import psycopg2 as ps
 from psycopg2 import sql
-import traceback
+from sqlalchemy import create_engine
+
+# pd.set_option('display.max_columns', None)
 
 load_dotenv()
 
-URL_API = os.getenv('URL_API')
+URL_API = os.environ['URL_API']
 
 DB_CONFIG={
-    'host': os.getenv('DB_HOST'),
-    'port': os.getenv('DB_PORT'),
-    'dbname': os.getenv('DB_NAME'),
-    'user': os.getenv('DB_USER'),
+    'host': os.environ['DB_HOST'],
+    'port': int(os.environ['DB_PORT']),
+    'dbname': os.environ['DB_NAME'],
+    'user': os.environ['DB_USER'],
     'password': os.environ['DB_PASSWORD'],
 }
+
+
 
 def get_data(url):
     r = req.get(url, timeout=10)
@@ -51,24 +55,25 @@ def save_records(conn, table, df, key):
     df = df.drop_duplicates(subset=key)
 
     col_def = [
-        sql.SQL('{} {}').
-        format(sql.Identifier(col), sql.SQL(pg_type(df[col]))) for col in columns
+        sql.SQL('{} {}').format(
+            sql.Identifier(col), sql.SQL(pg_type(df[col]))) for col in columns
     ]
 
     col_def.append(sql.SQL('PRIMARY KEY ({})').format(sql.Identifier(key)))
 
     create_query = (sql.SQL(
-        'CREATE TABLE IF NOT EXISTS {} ({})').
-                    format(sql.Identifier(table), sql.SQL(', ').join(col_def)
+        'CREATE TABLE IF NOT EXISTS {} ({})').format(
+        sql.Identifier(table),
+        sql.SQL(', ').join(col_def)
     ))
 
     insert_query = (sql.SQL(
         'INSERT INTO {} ({}) VALUES ({}) '
-        'ON CONFLICT ({}) DO NOTHING').
-                    format(sql.Identifier(table),
-                    sql.SQL(', ').join(map(sql.Identifier, columns)),
-                    sql.SQL(', ').join([sql.Placeholder()] * len(columns)),
-                    sql.Identifier(key),
+        'ON CONFLICT ({}) DO NOTHING').format(
+        sql.Identifier(table),
+        sql.SQL(', ').join(map(sql.Identifier, columns)),
+        sql.SQL(', ').join([sql.Placeholder()] * len(columns)),
+        sql.Identifier(key),
     ))
     with conn.cursor() as cur:
         cur.execute(create_query)
@@ -76,6 +81,15 @@ def save_records(conn, table, df, key):
 
 def connect_db():
     return ps.connect(**DB_CONFIG)
+
+def select_rows(conn):
+    engine = create_engine('postgresql+psycopg2://', creator=connect_db)
+    try:
+        return pd.read_sql_query(
+            f'SELECT * FROM airports LIMIT 20', engine
+        )
+    finally:
+        engine.dispose()
 def main():
     try:
         data = get_data(URL_API)
@@ -90,8 +104,14 @@ def main():
             with conn.cursor() as cur:
                 cur.execute('SELECT count(*) FROM airports;')
                 print('Строк в таблице', cur.fetchone()[0])
-    except Exception:
-        traceback.print_exc()
+        print(select_rows(conn))
+    except req.exceptions.RequestException as e:
+        print('API request error', e)
+    except ps.Error as e:
+        print('BD Error', e)
+    except (ValueError, KeyError) as e:
+        print('Incorrect data', e)
+
 if __name__ == '__main__':
     main()
 
