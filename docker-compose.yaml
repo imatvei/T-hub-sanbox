@@ -5,11 +5,11 @@ services:
     container_name: local-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: matvei
-      POSTGRES_PASSWORD: '1234mm'
-      POSTGRES_DB: m_db
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5433:5432"
+      - "${DB_PORT}:5432"
     volumes:
       - postgress_db:/var/lib/postgresql/data
 
