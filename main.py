@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 import requests as req
 import pandas as pd
 from pandas.api.types import infer_dtype
@@ -5,14 +7,16 @@ import psycopg2 as ps
 from psycopg2 import sql
 import traceback
 
+load_dotenv()
+
 URL_API = 'https://raw.githubusercontent.com/jbrooksuk/JSON-Airports/refs/heads/master/airports.json'
 
 DB_CONFIG={
-    'host': 'localhost',
-    'port': 5433,
-    'dbname': 'm_db',
-    'user': 'matvei',
-    'password': '1234mm',
+    'host': os.getenv('DB_HOST'),
+    'port': os.getenv('DB_PORT'),
+    'dbname': os.getenv('DB_NAME'),
+    'user': os.getenv('DB_USER'),
+    'password': os.environ['DB_PASSWORD'],
 }
 
 def get_data(url):
