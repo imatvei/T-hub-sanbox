@@ -9,7 +9,7 @@ import traceback
 
 load_dotenv()
 
-URL_API = 'https://raw.githubusercontent.com/jbrooksuk/JSON-Airports/refs/heads/master/airports.json'
+URL_API = os.getenv('URL_API')
 
 DB_CONFIG={
     'host': os.getenv('DB_HOST'),
