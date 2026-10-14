@@ -21,8 +21,6 @@ DB_CONFIG={
     'password': os.environ['DB_PASSWORD'],
 }
 
-
-
 def get_data(url):
     r = req.get(url, timeout=10)
     r.raise_for_status()
@@ -32,7 +30,7 @@ def get_data(url):
     return data
 
 def pg_type(series):
-    value = infer_dtype(series.dropna(), skipna=False)
+    value = infer_dtype(series.dropna())
     if value == 'boolean':
         return 'BOOLEAN'
     if value == 'integer':
@@ -47,12 +45,12 @@ def build_dataframe(data):
         df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
-def df_to_rows(df):
+def prepare_rows(df):
     return df.astype(object).where(df.notna(), None).values.tolist()
 
-def save_records(conn, table, df, key):
-    columns = list(df.columns)
+def load_to_db(conn, table, df, key):
     df = df.drop_duplicates(subset=key)
+    columns = list(df.columns)
 
     col_def = [
         sql.SQL('{} {}').format(
@@ -77,16 +75,16 @@ def save_records(conn, table, df, key):
     ))
     with conn.cursor() as cur:
         cur.execute(create_query)
-        cur.executemany(insert_query, df_to_rows(df))
+        cur.executemany(insert_query, prepare_rows(df))
 
 def connect_db():
     return ps.connect(**DB_CONFIG)
 
-def select_rows(conn):
+def select_rows():
     engine = create_engine('postgresql+psycopg2://', creator=connect_db)
     try:
         return pd.read_sql_query(
-            f'SELECT * FROM airports LIMIT 20', engine
+            'SELECT * FROM airports LIMIT 20', engine
         )
     finally:
         engine.dispose()
@@ -99,12 +97,12 @@ def main():
             with conn.cursor() as cur:
                 cur.execute('SELECT version();')
                 print(cur.fetchone()[0])
-            save_records(conn, 'airports', df, key='iata')
+            load_to_db(conn, 'airports', df, key='iata')
 
             with conn.cursor() as cur:
                 cur.execute('SELECT count(*) FROM airports;')
                 print('Строк в таблице', cur.fetchone()[0])
-        print(select_rows(conn))
+        print(select_rows())
     except req.exceptions.RequestException as e:
         print('API request error', e)
     except ps.Error as e:
