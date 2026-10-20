@@ -5,7 +5,7 @@ import pandas as pd
 from pandas.api.types import infer_dtype
 import psycopg2 as ps
 from psycopg2 import sql
-from sqlalchemy import create_engine
+from psycopg2.extras import execute_values
 
 # pd.set_option('display.max_columns', None)
 
@@ -33,7 +33,7 @@ def pg_type(series):
     value = infer_dtype(series.dropna())
     if value == 'boolean':
         return 'BOOLEAN'
-    if value == 'integer':
+    if value == ('integer','mixed-integer'):
         return 'BIGINT'
     if value in ('floating', 'mixed-integer-float'):
         return 'DOUBLE PRECISION'
@@ -66,43 +66,40 @@ def load_to_db(conn, table, df, key):
     ))
 
     insert_query = (sql.SQL(
-        'INSERT INTO {} ({}) VALUES ({}) '
+        'INSERT INTO {} ({}) VALUES %s '
         'ON CONFLICT ({}) DO NOTHING').format(
         sql.Identifier(table),
         sql.SQL(', ').join(map(sql.Identifier, columns)),
-        sql.SQL(', ').join([sql.Placeholder()] * len(columns)),
+        # sql.SQL(', ').join([sql.Placeholder()] * len(columns)),
         sql.Identifier(key),
     ))
     with conn.cursor() as cur:
         cur.execute(create_query)
-        cur.executemany(insert_query, prepare_rows(df))
+
+        # cur.executemany(insert_query, prepare_rows(df))
+
+        execute_values(cur, insert_query, prepare_rows(df), page_size=1000)
+
+        cur.execute(sql.SQL('SELECT * FROM {} LIMIT 20').format(sql.Identifier(table)))
+        select_rows = [d[0] for d in cur.description]
+        return pd.DataFrame(cur.fetchall(), columns=select_rows)
 
 def connect_db():
     return ps.connect(**DB_CONFIG)
 
-def select_rows():
-    engine = create_engine('postgresql+psycopg2://', creator=connect_db)
-    try:
-        return pd.read_sql_query(
-            'SELECT * FROM airports LIMIT 20', engine
-        )
-    finally:
-        engine.dispose()
 def main():
     try:
         data = get_data(URL_API)
         df = build_dataframe(data)
 
         with connect_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute('SELECT version();')
-                print(cur.fetchone()[0])
             load_to_db(conn, 'airports', df, key='iata')
+            df_rows = load_to_db(conn, 'airports', df, key='iata')
 
             with conn.cursor() as cur:
                 cur.execute('SELECT count(*) FROM airports;')
                 print('Строк в таблице', cur.fetchone()[0])
-        print(select_rows())
+        print(df_rows)
     except req.exceptions.RequestException as e:
         print('API request error', e)
     except ps.Error as e:
@@ -112,4 +109,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
