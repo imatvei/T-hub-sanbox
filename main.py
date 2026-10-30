@@ -29,24 +29,28 @@ def get_data(url):
         raise ValueError(f"Ожидался список словарей, получено: {type(data).__name__}")
     return data
 
-def pg_type(series):
-    value = infer_dtype(series.dropna())
-    if value == 'boolean':
-        return 'BOOLEAN'
-    if value == ('integer','mixed-integer'):
-        return 'BIGINT'
-    if value in ('floating', 'mixed-integer-float'):
-        return 'DOUBLE PRECISION'
-    return 'TEXT'
-
 def build_dataframe(data):
     df = pd.DataFrame(data)
     for col in ['lat', 'lon']:
         df[col] = pd.to_numeric(df[col], errors='coerce')
     return df
 
+def pg_type(series):
+    value = infer_dtype(series.dropna())
+    if value == 'boolean':
+        return 'BOOLEAN'
+    if value in 'integer':
+        return 'BIGINT'
+    if value in ('floating', 'mixed-integer-float'):
+        return 'DOUBLE PRECISION'
+    return 'TEXT'
+
+
 def prepare_rows(df):
     return df.astype(object).where(df.notna(), None).values.tolist()
+
+def connect_db():
+    return ps.connect(**DB_CONFIG)
 
 def load_to_db(conn, table, df, key):
     df = df.drop_duplicates(subset=key)
@@ -64,7 +68,6 @@ def load_to_db(conn, table, df, key):
         sql.Identifier(table),
         sql.SQL(', ').join(col_def)
     ))
-
     insert_query = (sql.SQL(
         'INSERT INTO {} ({}) VALUES %s '
         'ON CONFLICT ({}) DO NOTHING').format(
@@ -84,8 +87,6 @@ def load_to_db(conn, table, df, key):
         select_rows = [d[0] for d in cur.description]
         return pd.DataFrame(cur.fetchall(), columns=select_rows)
 
-def connect_db():
-    return ps.connect(**DB_CONFIG)
 
 def main():
     try:
@@ -93,7 +94,6 @@ def main():
         df = build_dataframe(data)
 
         with connect_db() as conn:
-            load_to_db(conn, 'airports', df, key='iata')
             df_rows = load_to_db(conn, 'airports', df, key='iata')
 
             with conn.cursor() as cur:
@@ -103,7 +103,7 @@ def main():
     except req.exceptions.RequestException as e:
         print('API request error', e)
     except ps.Error as e:
-        print('BD Error', e)
+        print('DB Error', e)
     except (ValueError, KeyError) as e:
         print('Incorrect data', e)
 
