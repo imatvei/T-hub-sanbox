@@ -3,6 +3,7 @@
 git clone -b task_get_airports https://github.com/imatvei/T-hub-sanbox.git
 
 cd T-hub-sanbox
+
 2. Создаём файл с настройками 
 
 Copy-Item .env.example .env
